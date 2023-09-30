@@ -1,4 +1,4 @@
-"""Adds config flow for Blueprint."""
+"""Adds config flow."""
 from __future__ import annotations
 
 import voluptuous as vol
@@ -8,16 +8,16 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .api import (
-    IntegrationBlueprintApiClient,
-    IntegrationBlueprintApiClientAuthenticationError,
-    IntegrationBlueprintApiClientCommunicationError,
-    IntegrationBlueprintApiClientError,
+    ThaiEasyPassApiClient,
+    ThaiEasyPassApiClientAuthenticationError,
+    ThaiEasyPassApiClientCommunicationError,
+    ThaiEasyPassApiClientError,
 )
 from .const import DOMAIN, LOGGER
 
 
-class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Blueprint."""
+class ThaiEasyPassFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Config flow."""
 
     VERSION = 1
 
@@ -33,13 +33,13 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
                 )
-            except IntegrationBlueprintApiClientAuthenticationError as exception:
+            except ThaiEasyPassApiClientAuthenticationError as exception:
                 LOGGER.warning(exception)
                 _errors["base"] = "auth"
-            except IntegrationBlueprintApiClientCommunicationError as exception:
+            except ThaiEasyPassApiClientCommunicationError as exception:
                 LOGGER.error(exception)
                 _errors["base"] = "connection"
-            except IntegrationBlueprintApiClientError as exception:
+            except ThaiEasyPassApiClientError as exception:
                 LOGGER.exception(exception)
                 _errors["base"] = "unknown"
             else:
@@ -72,9 +72,13 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_credentials(self, username: str, password: str) -> None:
         """Validate credentials."""
-        client = IntegrationBlueprintApiClient(
+        client = ThaiEasyPassApiClient(
             username=username,
             password=password,
             session=async_create_clientsession(self.hass),
         )
-        await client.async_get_data()
+        data = await client.async_get_data(True)
+        if not data:
+            raise ThaiEasyPassApiClientAuthenticationError(
+                "Invalid credentials",
+            )
