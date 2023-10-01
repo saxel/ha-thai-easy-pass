@@ -95,7 +95,7 @@ class ThaiEasyPassApiClient:
         ]
 
     async def async_login(self) -> any:
-        """Login"""
+        """Login."""
         LOGGER.debug("Trying to login")
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = f"email={self._username}&password={self._password}"
