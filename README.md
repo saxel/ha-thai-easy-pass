@@ -12,6 +12,13 @@ Home Assistant custom component to integrate data from Thai Easy Pass. The integ
 
 ## Installation
 
+### HACS (recommended)
+
+This integration can be installed via HACS.
+1. Click here [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=saxel&repository=ha-thai-easy-pass&category=integration) to add this repository to your Home Assistant instance.
+1. In the repository page click *Download*.
+1. Restart Home Assistant.
+
 ### Manual installation
 
 1. Using the tool of choice open the directory (folder) for your HA configuration (where you find `configuration.yaml`).
@@ -19,7 +26,7 @@ Home Assistant custom component to integrate data from Thai Easy Pass. The integ
 1. In the `custom_components` directory (folder) create a new folder called `thai_easy_pass`.
 1. Download _all_ the files from the `custom_components/thai_easy_pass/` directory (folder) in this repository.
 1. Place the files you downloaded in the new directory (folder) you created.
-1. Restart Home Assistant
+1. Restart Home Assistant.
 
 ## Configuration
 

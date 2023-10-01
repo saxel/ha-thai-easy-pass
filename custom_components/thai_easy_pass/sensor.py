@@ -89,7 +89,7 @@ class ThaiEasyPassSensor(ThaiEasyPassEntity, SensorEntity):
     @property
     def name(self) -> str:
         """Name."""
-        return self._name
+        return f"Thai Easy Pass {self._name}"
 
     @property
     def icon(self) -> str | None:
