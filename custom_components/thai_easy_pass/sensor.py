@@ -3,12 +3,11 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import (
     SensorEntity,
-    SensorEntityDescription,
     SensorDeviceClass,
 )
 from homeassistant.helpers.entity import DeviceInfo
 
-from .const import DOMAIN, LOGGER, KEY_SN, SENSORS, NAME, MANUFACTURER
+from .const import DOMAIN, KEY_SN, SENSORS, NAME, MANUFACTURER
 from .coordinator import ThaiEasyPassCoordinator
 from .entity import ThaiEasyPassEntity
 
@@ -69,38 +68,46 @@ class ThaiEasyPassSensor(ThaiEasyPassEntity, SensorEntity):
 
     @property
     def unique_id(self) -> str:
+        """Unique Id."""
         return f"thai_easy_pass_{self._key}_{self._serial_number}"
 
     @property
     def native_value(self) -> int:
+        """Value."""
         return self.get_card().get(self._key)
 
     @property
     def native_unit_of_measurement(self) -> str:
+        """Unit."""
         return self._native_unit_of_measurement
 
     @property
     def device_class(self) -> str:
+        """Device class."""
         return self._device_class
 
     @property
     def name(self) -> str:
+        """Name."""
         return self._name
 
     @property
     def icon(self) -> str | None:
+        """Icon."""
         return self._icon
 
     @property
     def available(self) -> bool:
+        """Available."""
         return True
 
     @property
     def device_info(self) -> DeviceInfo | None:
+        """Device Info."""
         return self._device_info
 
     def get_card(self) -> {}:
-        """Get the card"""
+        """Get the card."""
         for card in self.coordinator.data:
             if card.get(KEY_SN) == self._serial_number:
                 return card

@@ -1,3 +1,4 @@
+"""Thai Easy Pass API Client."""
 from __future__ import annotations
 
 import asyncio
@@ -42,6 +43,7 @@ class ThaiEasyPassApiClient:
         password: str,
         session: aiohttp.ClientSession,
     ) -> None:
+        """Initialize the API Client."""
         self._username = username
         self._password = password
         self._session = session
@@ -52,6 +54,8 @@ class ThaiEasyPassApiClient:
 
         if not login and not data:
             data = await self._async_get_data(True)
+
+        LOGGER.debug("Received data: %s", data)
         return data
 
     async def _async_get_data(self, login=False) -> any:
@@ -91,7 +95,7 @@ class ThaiEasyPassApiClient:
         ]
 
     async def async_login(self) -> any:
-        """Login"""
+        """Login."""
         LOGGER.debug("Trying to login")
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         data = f"email={self._username}&password={self._password}"
