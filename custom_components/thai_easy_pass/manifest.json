@@ -6,11 +6,11 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/saxel/ha-thai-easy-pass",
+  "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/saxel/ha-thai-easy-pass/issues",
-  "integration_type": "hub",
-  "version": "0.0.0",
   "requirements": [
     "beautifulsoup4==4.12.2"
-  ]
+  ],
+  "version": "0.0.0"
 }
