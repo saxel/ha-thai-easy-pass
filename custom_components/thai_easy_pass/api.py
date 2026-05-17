@@ -14,9 +14,17 @@ from .const import (
     BASE_URL,
     CARD_LIST_REFERER,
     EASY_PASS_URL,
+    KEY_ACCOUNT_NUMBER,
     KEY_BALANCE,
+    KEY_CAR_COLOR,
+    KEY_CAR_MODEL,
+    KEY_CARD_NAME,
+    KEY_LICENSE_PLATE,
+    KEY_MFLOW_STATUS,
     KEY_OBU,
+    KEY_REWARD_POINT,
     KEY_SN,
+    KEY_TAG_STATUS,
     LOGGER,
     LOGIN_PAGE_URL,
     SIGNIN_URL,
@@ -224,8 +232,31 @@ def _map_card(card: dict) -> dict:
     except (TypeError, ValueError):
         balance = 0.0
 
+    raw_reward = card.get("Reward_Point")
+    try:
+        reward = int(raw_reward) if raw_reward not in (None, "") else 0
+    except (TypeError, ValueError):
+        reward = 0
+
+    plate_no = (card.get("PlateNo") or "").strip()
+    plate_province = (card.get("PlateProvince") or "").strip()
+    if plate_no and plate_province:
+        license_plate = f"{plate_no} {plate_province}"
+    else:
+        license_plate = plate_no or plate_province
+
+    plus_data = card.get("easyPassPlusData") or {}
+
     return {
         KEY_SN: card.get("SmartcardID", ""),
         KEY_OBU: card.get("PAN_NUM", ""),
         KEY_BALANCE: balance,
+        KEY_CARD_NAME: card.get("CardName") or "",
+        KEY_CAR_MODEL: card.get("CarModel") or "",
+        KEY_CAR_COLOR: card.get("CarColor") or "",
+        KEY_LICENSE_PLATE: license_plate,
+        KEY_REWARD_POINT: reward,
+        KEY_TAG_STATUS: card.get("TagStatusText") or "",
+        KEY_MFLOW_STATUS: plus_data.get("mflowStatus") or "",
+        KEY_ACCOUNT_NUMBER: card.get("AccountNumber") or "",
     }
