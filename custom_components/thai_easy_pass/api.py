@@ -1,24 +1,26 @@
-"""Thai Easy Pass API Client."""
+"""Thai Easy Pass API Client (member-thaieasypass.exat.co.th)."""
 from __future__ import annotations
 
 import asyncio
+import json
 import socket
+from urllib.parse import quote
 
 import aiohttp
 import async_timeout
-
 from bs4 import BeautifulSoup
 
 from .const import (
-    SIGNIN_URL,
-    LOGGER,
-    KEY_SN,
-    KEY_OBU,
-    KEY_BALANCE,
-    ATTR_SN,
-    ATTR_BALANCE,
-    ATTR_OBU,
+    BASE_URL,
+    CARD_LIST_REFERER,
     EASY_PASS_URL,
+    KEY_BALANCE,
+    KEY_OBU,
+    KEY_SN,
+    LOGGER,
+    LOGIN_PAGE_URL,
+    SIGNIN_URL,
+    USER_AGENT,
 )
 
 
@@ -34,6 +36,10 @@ class ThaiEasyPassApiClientAuthenticationError(ThaiEasyPassApiClientError):
     """Exception to indicate an authentication error."""
 
 
+class _SessionExpired(Exception):
+    """Internal signal: server returned a login page instead of JSON."""
+
+
 class ThaiEasyPassApiClient:
     """Thai Easy Pass API Client."""
 
@@ -47,75 +53,133 @@ class ThaiEasyPassApiClient:
         self._username = username
         self._password = password
         self._session = session
+        self._csrf_token: str | None = None
 
-    async def async_get_data(self, login=False) -> any:
-        """Get data from the API."""
-        data = await self._async_get_data(login)
-
-        if not login and not data:
-            data = await self._async_get_data(True)
-
-        LOGGER.debug("Received data: %s", data)
-        return data
-
-    async def _async_get_data(self, login=False) -> any:
-        """Get data from the API."""
-        if login:
+    async def async_get_data(self, login: bool = False) -> list[dict]:
+        """Fetch the card list, logging in first if needed."""
+        if login or self._csrf_token is None:
             await self.async_login()
 
-        content = await self._api_wrapper(method="get", url=EASY_PASS_URL)
+        try:
+            data = await self._fetch_cards()
+        except _SessionExpired:
+            LOGGER.debug("Session expired, re-logging in")
+            await self.async_login()
+            try:
+                data = await self._fetch_cards()
+            except _SessionExpired as exc:
+                raise ThaiEasyPassApiClientAuthenticationError(
+                    "Session expired and re-login did not restore access"
+                ) from exc
 
-        soup = BeautifulSoup(content, "html.parser")
-        table = soup.find("table")
+        LOGGER.debug("Received %d cards", len(data))
+        return data
 
-        if not table:
-            return []
+    async def async_login(self) -> None:
+        """Log into the new member portal."""
+        LOGGER.debug("Fetching CSRF token from login page")
+        html = await self._api_wrapper(
+            method="get",
+            url=LOGIN_PAGE_URL,
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "User-Agent": USER_AGENT,
+            },
+        )
+        token = _extract_csrf_token(html)
+        if not token:
+            raise ThaiEasyPassApiClientError("CSRF token not found on login page")
+        self._csrf_token = token
 
-        # Get table headers
-        headers = []
-        header_tr = table.find("tr", class_="head-table")
-        for td in header_tr.find_all("td"):
-            headers.append(td.text.strip())
+        LOGGER.debug("Submitting login")
+        body = (
+            f"_token={quote(token, safe='')}"
+            f"&user_name={quote(self._username, safe='')}"
+            f"&password={quote(self._password, safe='')}"
+        )
+        text = await self._api_wrapper(
+            method="post",
+            url=SIGNIN_URL,
+            raw_body=body,
+            headers={
+                "Accept": "*/*",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Origin": BASE_URL,
+                "Referer": LOGIN_PAGE_URL,
+                "User-Agent": USER_AGENT,
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        )
 
-        # Get devices from table
-        devices = []
-        for device_tr in header_tr.find_next_siblings("tr"):
-            device = {}
-            for i, td in enumerate(device_tr.find_all("td")):
-                device[headers[i]] = td.text.strip()
-            devices.append(device)
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ThaiEasyPassApiClientError(
+                f"Unexpected login response: {text[:200]}"
+            ) from exc
 
-        return [
-            {
-                KEY_SN: device[ATTR_SN],
-                KEY_OBU: device[ATTR_OBU],
-                KEY_BALANCE: device[ATTR_BALANCE],
-            }
-            for device in devices
-        ]
+        if (
+            payload.get("status") != "success"
+            or payload.get("status_code") != 200
+        ):
+            msg = payload.get("message") or payload.get("status") or "login failed"
+            raise ThaiEasyPassApiClientAuthenticationError(str(msg))
 
-    async def async_login(self) -> any:
-        """Login."""
-        LOGGER.debug("Trying to login")
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        data = f"email={self._username}&password={self._password}"
-        await self._session.post(SIGNIN_URL, data=data, headers=headers)
+        if payload.get("mfa_flag", 0) != 0:
+            raise ThaiEasyPassApiClientError(
+                "Account requires MFA, which is not supported"
+            )
+
+    async def _fetch_cards(self) -> list[dict]:
+        """Fetch the card list JSON and shape it for the coordinator."""
+        if not self._csrf_token:
+            raise ThaiEasyPassApiClientError("No CSRF token; login required")
+
+        url = (
+            f"{EASY_PASS_URL}?_token={quote(self._csrf_token, safe='')}&page=1"
+        )
+        text = await self._api_wrapper(
+            method="get",
+            url=url,
+            headers={
+                "Accept": "*/*",
+                "Referer": CARD_LIST_REFERER,
+                "User-Agent": USER_AGENT,
+                "X-Requested-With": "XMLHttpRequest",
+            },
+        )
+
+        stripped = text.lstrip()
+        if not stripped.startswith(("{", "[")):
+            raise _SessionExpired()
+
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ThaiEasyPassApiClientError(
+                f"Invalid card list response: {text[:200]}"
+            ) from exc
+
+        raw_cards = (
+            payload.get("easyPassCardsData", {}).get("data", []) or []
+        )
+        return [_map_card(card) for card in raw_cards]
 
     async def _api_wrapper(
         self,
         method: str,
         url: str,
-        data: dict | None = None,
+        raw_body: str | None = None,
         headers: dict | None = None,
-    ) -> any:
-        """Get information from the API."""
+    ) -> str:
+        """Perform an HTTP request and return the body text."""
         try:
-            async with async_timeout.timeout(10):
+            async with async_timeout.timeout(15):
                 response = await self._session.request(
                     method=method,
                     url=url,
                     headers=headers,
-                    json=data,
+                    data=raw_body,
                 )
                 if response.status in (401, 403):
                     raise ThaiEasyPassApiClientAuthenticationError(
@@ -132,7 +196,36 @@ class ThaiEasyPassApiClient:
             raise ThaiEasyPassApiClientCommunicationError(
                 "Error fetching information"
             ) from exception
-        except Exception as exception:
+        except ThaiEasyPassApiClientError:
+            raise
+        except Exception as exception:  # noqa: BLE001
             raise ThaiEasyPassApiClientError(
                 "Something really wrong happened!"
             ) from exception
+
+
+def _extract_csrf_token(html: str) -> str | None:
+    """Pull the Laravel CSRF token out of the login page HTML."""
+    soup = BeautifulSoup(html, "html.parser")
+    meta = soup.find("meta", attrs={"name": "csrf-token"})
+    if meta and meta.get("content"):
+        return meta["content"]
+    hidden = soup.find("input", attrs={"name": "_token"})
+    if hidden and hidden.get("value"):
+        return hidden["value"]
+    return None
+
+
+def _map_card(card: dict) -> dict:
+    """Map a card record from the new JSON shape to the coordinator's keys."""
+    raw_balance = card.get("AC_Balance")
+    try:
+        balance = float(raw_balance) if raw_balance not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        balance = 0.0
+
+    return {
+        KEY_SN: card.get("SmartcardID", ""),
+        KEY_OBU: card.get("PAN_NUM", ""),
+        KEY_BALANCE: balance,
+    }
